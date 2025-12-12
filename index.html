@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The War Room - Historical Content Command</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap');
+        .font-serif { font-family: 'Playfair Display', serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1c1917; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #44403c; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #57534e; }
+        
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+        
+        .archive-photo { filter: grayscale(100%) contrast(110%) sepia(20%) brightness(90%); position: relative; }
+        
+        #error-display { display: none; padding: 20px; background: #450a0a; color: #fecaca; border-bottom: 1px solid #991b1b; font-family: monospace; }
+    </style>
+</head>
+<body class="bg-stone-950 text-stone-200 font-sans selection:bg-amber-900 selection:text-white">
+    
+    <div id="error-display"></div>
+    <div id="root"></div>
+
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            const display = document.getElementById('error-display');
+            display.style.display = 'block';
+            display.innerHTML = `<strong>System Failure:</strong> ${message} <br><small>${source}:${lineno}</small>`;
+        };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICONS ---
+        const icons = window.lucide ? window.lucide.icons : {};
+        const LucideIcons = Object.keys(icons).reduce((acc, key) => {
+            acc[key] = ({ className, size = 24, ...props }) => {
+                const svgHtml = icons[key].toSvg({ class: className, width: size, height: size, ...props });
+                return <span dangerouslySetInnerHTML={{ __html: svgHtml }} style={{display: 'inline-flex', alignItems: 'center'}} />;
+            };
+            return acc;
+        }, {});
+
+        const { 
+            Type = () => null, FileText = () => null, Youtube = () => null, Download = () => null, 
+            RefreshCw = () => null, Radio = () => null, Crosshair = () => null, Feather = () => null, 
+            Copy = () => null, Check = () => null, Cpu = () => null, FileBox = () => null, 
+            Share = () => null, Mic = () => null, Play = () => null, Volume2 = () => null, 
+            AlertTriangle = () => null, Music = () => null, History = () => null, Trash2 = () => null, 
+            ExternalLink = () => null, Search = () => null, Globe = () => null, Languages = () => null, 
+            Clipboard = () => null, StopCircle = () => null, Camera = () => null, Image = () => null,
+            Clock = () => null, Zap = () => null, LayoutGrid = () => null
+        } = LucideIcons;
+        
+        const ImageIcon = LucideIcons.Image || (() => null); 
+
+        // --- CONSTANTS ---
+        const SAFETY_SETTINGS = [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+        ];
+
+        const VOICES = [
+            { name: "Fenrir", desc: "Deep, Intense (Recommended)" },
+            { name: "Charon", desc: "Authoritative, Low" },
+            { name: "Kore", desc: "Calm, Somber" },
+            { name: "Puck", desc: "Neutral, Clear" },
+            { name: "Zephyr", desc: "Standard Male" }
+        ];
+
+        const STORY_TYPES = [
+            "Wehrmacht Infantry Diaries: The Eastern Front Nightmare",
+            "Panzer Ace Chronicles: Inside the Tiger & Panther Tanks",
+            "U-Boat Crews: Life and Death in the 'Iron Coffins'",
+            "Luftwaffe Fighter Pilots: Defending the Crumbling Reich",
+            "The Afrika Korps: Rommel's Desert War from the German Side",
+            "The Fall of Berlin: 1945 Through German Eyes",
+            "German Paratroopers (Fallschirmjäger): Green Devils at Monte Cassino",
+            "The Retreat from Russia: The Destruction of Army Group Center",
+            "German Secret Weapons: V-Weapons & Jet Fighters (Me 262)",
+            "The Atlantic Wall Defenders: D-Day from the German Bunkers",
+            "Battle of the Bulge: The Wehrmacht's Last Desperate Offensive",
+            "Stalingrad: The Kessel (Pocket) from the Inside",
+            "German Night Fighters: The Radar War in the Skies",
+            "The Kriegsmarine Surface Fleet: Bismarck & Tirpitz Stories",
+            "German Combat Medics on the Front Lines",
+            "Teenage Flak Helpers: The Hitler Youth's Last Stand",
+            "German Resistance: The July 20th Plot & Valkyrie",
+            "The Battle of Seelow Heights: The Gates of Berlin",
+            "German Snipers: The Invisible War on the Ostfront",
+            "The Halsey-Doolittle Raid: Tokyo's Shock (Axis Perspective)",
+            "Allied Soldier Stories",
+            "Forgotten Technology",
+            "Espionage & Sabotage"
+        ];
+
+        const TARGET_LANGUAGES = ["English", "German", "French", "Spanish", "Italian", "Polish", "Russian", "Japanese", "Portuguese", "Dutch"];
+
+        // --- UTILS ---
+        const cleanText = (text) => text ? text.replace(/#{1,6}\s?/g, '').replace(/\*\*/g, '').replace(/<[^>]*>/g, '').replace(/\[.*?\]/g, '').trim() : "";
+        
+        const formatTime = (seconds) => { 
+            const m = Math.floor(seconds / 60); 
+            const s = Math.floor(seconds % 60); 
+            return `${m}:${s < 10 ? '0' : ''}${s}`; 
+        };
+        
+        const base64ToUint8Array = (base64) => {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+            return bytes;
+        };
+
+        const concatenateAudioBuffers = (buffers) => {
+            let totalLength = buffers.reduce((acc, b) => acc + b.length, 0);
+            const result = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const buffer of buffers) {
+                result.set(buffer, offset);
+                offset += buffer.length;
+            }
+            return result;
+        };
+
+        const createWavBlob = (pcmData) => {
+            const wavHeader = new ArrayBuffer(44);
+            const view = new DataView(wavHeader);
+            const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + pcmData.length, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 24000, true); view.setUint32(28, 24000 * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, pcmData.length, true);
+            return new Blob([view, pcmData], { type: 'audio/wav' });
+        };
+
+        const splitTextIntoChunks = (text, maxLength = 3000) => {
+            const chunks = [];
+            let currentChunk = "";
+            const sentences = text.split(/(?<=[.!?])\s+/);
+            for (const sentence of sentences) {
+                if ((currentChunk + sentence).length > maxLength) {
+                    if (currentChunk) chunks.push(currentChunk);
+                    currentChunk = sentence;
+                } else {
+                    currentChunk += (currentChunk ? " " : "") + sentence;
+                }
+            }
+            if (currentChunk) chunks.push(currentChunk);
+            return chunks;
+        };
+
+        // --- SUB-COMPONENTS ---
+
+        const InputSection = ({ 
+            apiKey, setApiKey, selectedStoryType, setSelectedStoryType, selectedVoice, setSelectedVoice, 
+            topic, setTopic, generatedIdeas, handleGenerateIdeas, loadingIdeas, autoGenerateAudio, setAutoGenerateAudio, 
+            startFullOperation, history, loadFromHistory, clearHistory 
+        }) => (
+            <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-12 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-stone-900 border border-stone-700 p-6 rounded-lg shadow-xl h-full">
+                        <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-serif text-stone-400 flex items-center gap-2"><History className="w-5 h-5" /> Mission Log</h3>{history.length > 0 && (<button type="button" onClick={clearHistory} className="text-xs text-red-900 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>)}</div>
+                        <div className="space-y-3">
+                            {history.length === 0 ? <p className="text-stone-600 text-sm italic">No prior missions recorded.</p> : history.map((entry) => (
+                                <div key={entry.id} onClick={() => loadFromHistory(entry)} className="bg-stone-950 p-3 rounded border border-stone-800 hover:border-amber-700 cursor-pointer group transition-colors"><div className="flex justify-between items-center mb-1"><span className="text-amber-600 text-[10px] font-mono">{entry.date}</span></div><p className="text-stone-300 text-sm font-serif font-medium line-clamp-2 group-hover:text-amber-100">{entry.topic}</p></div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="lg:col-span-2 bg-stone-900 border border-stone-700 p-8 rounded-lg shadow-2xl relative overflow-hidden">
+                    <h2 className="text-2xl font-serif text-amber-500 mb-6 flex items-center gap-2"><Radio className="w-6 h-6 animate-pulse" /> Mission Parameters</h2>
+                    <div className="space-y-6">
+                        <div><label className="block text-stone-400 text-sm uppercase tracking-widest mb-2 font-bold">API Key</label><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Enter Gemini API Key" className="w-full bg-stone-950 border border-stone-800 text-stone-300 p-4 rounded focus:border-amber-600 focus:outline-none font-mono" /></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div><label className="block text-stone-400 text-sm uppercase tracking-widest mb-2 font-bold">Story Type</label><div className="relative"><select value={selectedStoryType} onChange={(e) => setSelectedStoryType(e.target.value)} className="w-full bg-stone-950 border border-stone-800 text-stone-300 p-4 rounded appearance-none focus:border-amber-600 focus:outline-none font-serif custom-scrollbar">{STORY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div></div>
+                            <div><label className="block text-stone-400 text-sm uppercase tracking-widest mb-2 font-bold">Voice Officer</label><div className="relative"><select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)} className="w-full bg-stone-950 border border-stone-800 text-stone-300 p-4 rounded appearance-none focus:border-amber-600 focus:outline-none font-serif">{VOICES.map(v => <option key={v.name} value={v.name}>{v.name} - {v.desc}</option>)}</select></div></div>
+                        </div>
+                        <div>
+                            <label className="block text-stone-400 text-sm uppercase tracking-widest mb-2 font-bold">Topic</label>
+                            <div className="space-y-4">
+                                <textarea value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Enter topic..." className="w-full bg-stone-950 border border-stone-800 text-stone-100 p-4 rounded focus:border-amber-600 focus:outline-none min-h-[100px] font-serif text-lg resize-none" />
+                                {generatedIdeas.length > 0 && (<div className="grid gap-2 animate-fade-in">{generatedIdeas.map((idea, idx) => (<button type="button" key={idx} onClick={() => setTopic(idea)} className="text-left bg-stone-800 hover:bg-stone-700 text-stone-300 p-3 rounded border border-stone-700 hover:border-amber-600 transition-all text-sm font-serif">{idea}</button>))}</div>)}
+                                <button type="button" onClick={handleGenerateIdeas} disabled={loadingIdeas} className="text-amber-600 hover:text-amber-500 text-sm flex items-center gap-2 font-mono transition-colors disabled:opacity-50"><Crosshair className={`w-4 h-4 ${loadingIdeas ? 'animate-spin' : ''}`} /> {loadingIdeas ? "Decoding..." : "Intercept 5 Strategic Ideas"}</button>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 bg-stone-800 p-4 rounded border border-stone-700"><div className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${autoGenerateAudio ? 'bg-amber-600' : 'bg-stone-600'}`} onClick={() => setAutoGenerateAudio(!autoGenerateAudio)}><div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${autoGenerateAudio ? 'translate-x-4' : 'translate-x-0'}`}></div></div><div><span className="block text-sm font-bold text-stone-200">Auto-Synthesize Audio</span><span className="block text-xs text-stone-500">Adds ~1-2 mins.</span></div></div>
+                        <button type="button" onClick={startFullOperation} disabled={!topic || !apiKey} className={`w-full py-5 rounded text-xl font-bold uppercase tracking-[0.2em] transition-all duration-300 transform hover:scale-[1.01] ${(!topic || !apiKey) ? 'bg-stone-800 text-stone-600 cursor-not-allowed' : 'bg-gradient-to-b from-amber-700 to-amber-900 text-amber-100 hover:from-amber-600 hover:to-amber-800 shadow-lg shadow-amber-900/20 border border-amber-600'}`}>Commence Operation</button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const ProcessingSection = ({ loadingStatus, progress }) => (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-8 animate-fade-in">
+                <div className="relative"><div className="w-32 h-32 border-4 border-stone-800 border-t-amber-600 rounded-full animate-spin"></div><div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-amber-700"><Cpu className="w-10 h-10 animate-pulse" /></div></div>
+                <div className="w-full max-w-lg"><h2 className="text-2xl font-serif text-amber-500 mb-2">Executing Orders</h2><p className="text-stone-300 font-mono text-sm tracking-wider mb-4 h-6">{loadingStatus}</p><div className="w-full bg-stone-900 h-4 rounded-full overflow-hidden border border-stone-800"><div className="h-full bg-amber-700 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div></div></div>
+            </div>
+        );
+
+        const ScriptTab = ({ fullScript, selectedVoice, fullAudioBlobUrl, topic, chaptersContent, handleCleanCopy, downloadDocForDrive, handleManualChapterAudio }) => (
+            <div className="max-w-5xl mx-auto space-y-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 bg-stone-900/50 p-4 rounded border border-stone-800 gap-4">
+                    <div className="text-xs text-stone-500 font-mono uppercase"><div>Word Count: <span className="text-amber-500 font-bold">{fullScript.split(' ').length}</span></div><div>Voice: {selectedVoice}</div></div>
+                    <div className="flex flex-wrap gap-2"><button type="button" onClick={handleCleanCopy} className="bg-stone-800 hover:bg-stone-700 text-stone-300 px-3 py-2 rounded text-xs font-mono flex items-center gap-2 transition-colors"><Copy className="w-3 h-3" /> Copy Clean Text</button><button type="button" onClick={downloadDocForDrive} className="bg-green-800 hover:bg-green-700 text-green-100 px-4 py-2 rounded text-xs font-mono flex items-center gap-2 border border-green-700 shadow-lg shadow-green-900/20 transition-all hover:scale-105"><FileBox className="w-3 h-3" /> Save for Drive</button></div>
+                </div>
+                {fullAudioBlobUrl && <div className="bg-amber-900/20 border border-amber-700/50 p-6 rounded-lg animate-fade-in flex flex-col items-center text-center space-y-4"><div className="flex items-center gap-2 text-amber-500 font-bold uppercase tracking-widest text-sm"><Music className="w-4 h-4" /> Full Mission Briefing (Audio)</div><audio controls src={fullAudioBlobUrl} className="w-full max-w-lg h-10 rounded" /><a href={fullAudioBlobUrl} download={`${topic.replace(/\s+/g, '_')}_FULL_AUDIO.wav`} className="text-xs font-mono text-amber-600 hover:text-amber-500 flex items-center gap-2"><Download className="w-3 h-3" /> Download Full .WAV File</a></div>}
+                <div className="space-y-6">{chaptersContent.map((chapter, idx) => (
+                    <div key={idx} className="bg-stone-100 text-stone-900 p-8 rounded-sm shadow-xl">
+                        <h2 className="text-2xl font-serif font-bold text-stone-800 mb-4">{String(chapter.title)}</h2>
+                        <div className="font-serif text-lg leading-relaxed whitespace-pre-wrap">{cleanText(chapter.content)}</div>
+                        <div className="flex items-center gap-4 mt-4 pt-4 border-t border-stone-300">
+                            <button type="button" onClick={() => handleManualChapterAudio(idx)} disabled={chapter.isAudioLoading} className="bg-amber-100 hover:bg-amber-200 text-amber-900 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors disabled:opacity-50 border border-amber-300">{chapter.isAudioLoading ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Mic className="w-4 h-4"/>} Audio</button>
+                        </div>
+                    </div>
+                ))}</div>
+            </div>
+        );
+
+        const VisualsTab = ({ visualTimeline, useFreeImages, setUseFreeImages, handleCopyAllPrompts, handleGenerateAllVisuals, isBulkGenerating, handleGenerateSingleVisual }) => (
+            <div className="max-w-5xl mx-auto space-y-6">
+                <div className="bg-stone-900 border border-stone-700 p-6 rounded-lg flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div><h3 className="text-amber-500 font-serif text-xl flex items-center gap-2"><ImageIcon className="w-5 h-5" /> Visual Intelligence Center</h3><p className="text-xs text-stone-500 mt-1">Generated based on script analysis & timestamps.</p></div>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center bg-stone-800 rounded p-1 border border-stone-700">
+                            <button type="button" onClick={() => setUseFreeImages(true)} className={`px-3 py-1 text-xs rounded transition-colors ${useFreeImages ? 'bg-amber-700 text-white' : 'text-stone-400'}`}>Free (Pollinations)</button>
+                            <button type="button" onClick={() => setUseFreeImages(false)} className={`px-3 py-1 text-xs rounded transition-colors ${!useFreeImages ? 'bg-amber-700 text-white' : 'text-stone-400'}`}>Gemini (Paid)</button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={handleCopyAllPrompts} className="bg-stone-800 hover:bg-stone-700 text-stone-300 px-4 py-2 rounded font-bold uppercase tracking-wider text-xs flex items-center gap-2 transition-all border border-stone-600"><Clipboard className="w-4 h-4"/> Copy All Prompts</button>
+                            <button type="button" onClick={handleGenerateAllVisuals} disabled={isBulkGenerating} className="bg-green-800 hover:bg-green-700 text-green-100 px-6 py-2 rounded font-bold uppercase tracking-wider text-xs flex items-center gap-2 transition-all shadow-lg shadow-green-900/20">{isBulkGenerating ? <RefreshCw className="w-4 h-4 animate-spin"/> : <LayoutGrid className="w-4 h-4"/>} Generate All Assets</button>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {visualTimeline.map((item, idx) => (
+                        <div key={item.id} className="bg-stone-900 border border-stone-800 p-4 rounded-lg flex flex-col gap-4 relative group hover:border-amber-700 transition-colors">
+                            <div className="flex justify-between items-start"><span className="text-amber-600 font-mono text-xs bg-stone-950 px-2 py-1 rounded border border-stone-800 flex items-center gap-1"><Clock className="w-3 h-3"/> {item.timestamp}</span><span className="text-stone-500 text-[10px] uppercase font-bold tracking-widest">{item.chapter}</span></div>
+                            <div className="p-3 bg-stone-950 rounded border border-stone-800">
+                                <p className="text-sm text-stone-300 italic mb-3">"{item.query}"</p>
+                                <a href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(item.query + " historical photo ww2")}`} target="_blank" className="block w-full text-center bg-stone-800 hover:bg-amber-700 text-stone-400 hover:text-white py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2"><Search className="w-3 h-3"/> Access Archives</a>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                {visualTimeline.length === 0 && <div className="text-center py-20 text-stone-600 font-mono"><p>No visual recon available. Generate a script first.</p></div>}
+            </div>
+        );
+
+        const PackageTab = ({ metadata, thumbnailUrl, handleCopy }) => (
+            <div className="max-w-5xl mx-auto space-y-8">
+                <div className="bg-stone-900 border border-stone-700 p-6 rounded-lg flex gap-4">
+                    <div className="w-1/3 aspect-video bg-stone-950 rounded border border-stone-800 overflow-hidden relative">
+                        {thumbnailUrl ? <img src={thumbnailUrl} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-stone-600 text-xs">Generating Thumbnail...</div>}
+                        {thumbnailUrl && <a href={thumbnailUrl} download="thumbnail.png" className="absolute bottom-2 right-2 bg-black/70 text-white p-2 rounded hover:bg-amber-600"><Download className="w-4 h-4"/></a>}
+                    </div>
+                    <div className="w-2/3 space-y-3">
+                        <h3 className="text-amber-500 font-serif text-lg flex items-center gap-2"><Feather className="w-4 h-4" /> Viral Titles</h3>
+                        {(metadata.titles || []).map((t, idx) => (<div key={idx} className="bg-stone-950 p-3 rounded border border-stone-800 text-stone-300 text-sm font-medium hover:border-amber-700 cursor-pointer" onClick={() => handleCopy(t)}>{t}</div>))}
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-stone-900 border border-stone-700 p-6 rounded-lg relative group"><div className="flex justify-between items-center mb-4"><h3 className="text-amber-500 font-serif text-xl">Description</h3><button type="button" onClick={() => handleCopy(metadata.description)} className="bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white px-3 py-1 rounded text-xs font-mono flex items-center gap-2 uppercase border border-stone-600"><Clipboard className="w-3 h-3" /> Copy</button></div><textarea readOnly className="w-full bg-stone-950 p-4 rounded border border-stone-800 text-stone-300 h-64 focus:outline-none resize-none custom-scrollbar text-sm" value={metadata.description}/></div>
+                    <div className="space-y-6">
+                        <div className="bg-stone-900 border border-stone-700 p-6 rounded-lg relative"><div className="flex justify-between items-center mb-4"><h3 className="text-amber-500 font-serif text-xl">Hashtags</h3><button type="button" onClick={() => handleCopy((metadata.hashtags || []).join(' '))} className="bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white px-3 py-1 rounded text-xs font-mono flex items-center gap-2 uppercase border border-stone-600"><Clipboard className="w-3 h-3" /> Copy</button></div><div className="flex flex-wrap gap-2">{(metadata.hashtags || []).map((tag, idx) => (<span key={idx} className="bg-stone-800 text-stone-400 px-3 py-1 rounded-full text-xs font-mono">{tag}</span>))}</div></div>
+                        <div className="bg-stone-900 border border-stone-700 p-6 rounded-lg relative group"><div className="flex justify-between mb-4"><h3 className="text-amber-500 font-serif text-xl">Video Tags</h3><button type="button" onClick={() => handleCopy(metadata.videoTags)} className="bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-white px-3 py-1 rounded text-xs font-mono flex items-center gap-2 uppercase border border-stone-600"><Clipboard className="w-3 h-3" /> Copy All</button></div><textarea readOnly className="w-full bg-stone-950 p-4 rounded border border-stone-800 text-stone-400 text-xs font-mono h-32 focus:outline-none resize-none" value={metadata.videoTags}/></div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        function WarRoomApp() {
+            const [apiKey, setApiKey] = useState("");
+            const [step, setStep] = useState('input'); 
+            const [topic, setTopic] = useState('');
+            const [selectedVoice, setSelectedVoice] = useState("Fenrir");
+            const [selectedStoryType, setSelectedStoryType] = useState(STORY_TYPES[0]);
+            const [autoGenerateAudio, setAutoGenerateAudio] = useState(true);
+            const [targetLang, setTargetLang] = useState("English");
+            const [useFreeImages, setUseFreeImages] = useState(true); 
+
+            const [history, setHistory] = useState([]);
+            const [generatedIdeas, setGeneratedIdeas] = useState([]);
+            const [loadingIdeas, setLoadingIdeas] = useState(false);
+            const [loadingStatus, setLoadingStatus] = useState('');
+            const [progress, setProgress] = useState(0);
+            const [fullScript, setFullScript] = useState('');
+            
+            const [chaptersContent, setChaptersContent] = useState([]); 
+            const [visualTimeline, setVisualTimeline] = useState([]);
+            const [isBulkGenerating, setIsBulkGenerating] = useState(false);
+            const [fullAudioBlobUrl, setFullAudioBlobUrl] = useState(null);
+            const [metadata, setMetadata] = useState(null);
+            const [thumbnailUrl, setThumbnailUrl] = useState(null);
+            const [thumbnailPrompt, setThumbnailPrompt] = useState('');
+            const [visualsError, setVisualsError] = useState(null);
+            const [activeTab, setActiveTab] = useState('script');
+
+            const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            useEffect(() => { const h = localStorage.getItem('war_room_history'); if(h) try{setHistory(JSON.parse(h))}catch(e){} }, []);
+            const saveToHistory = (m) => { const n={id:Date.now(),date:new Date().toLocaleDateString(),...m}; const h=[n,...history].slice(0,5); setHistory(h); localStorage.setItem('war_room_history',JSON.stringify(h)); };
+            const loadFromHistory = (e) => { setTopic(e.topic); setFullScript(e.script); setChaptersContent(e.chapters); setMetadata(e.metadata); setThumbnailUrl(e.thumbnailUrl); setThumbnailPrompt(e.thumbnailPrompt); setSelectedVoice(e.voice||"Fenrir"); setSelectedStoryType(e.storyType||STORY_TYPES[0]); setTargetLang(e.language||"English"); setVisualTimeline(e.visualTimeline||[]); setStep('results'); };
+            const clearHistory = () => { if(confirm("Clear logs?")){setHistory([]); localStorage.removeItem('war_room_history');} };
+            
+            const handleCopy = (text) => { const t=document.createElement("textarea"); t.value=text; t.style.position="fixed"; document.body.appendChild(t); t.focus(); t.select(); try{document.execCommand('copy');alert("Copied!");}catch(e){alert("Failed.");} document.body.removeChild(t); };
+            const handleCleanCopy = () => handleCopy(chaptersContent.map(ch => cleanText(ch.content)).join("\n\n"));
+            const handleCopyAllPrompts = () => { if(!visualTimeline.length) return alert("No visuals"); handleCopy(visualTimeline.map(i=>`[${i.timestamp}] ${i.chapter}: ${i.query}`).join('\n\n')); };
+            
+            const generateWithRetry = async (prompt, systemInstruction="", retries=3) => { const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`; for(let i=0;i<retries;i++){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],systemInstruction:{parts:[{text:systemInstruction}]},safetySettings:SAFETY_SETTINGS})});if(!r.ok){if(r.status===429){await delay(2000*Math.pow(2,i));continue;}throw new Error(r.status);}const d=await r.json();return d.candidates?.[0]?.content?.parts?.[0]?.text||"Error";}catch(e){if(i===retries-1)throw e;await delay(1000);}} };
+            
+            const generateImageAsset = async (p) => { 
+                if(useFreeImages){
+                    const s=encodeURIComponent(p+" vintage, b&w, grainy, 4k"); const seed=Math.floor(Math.random()*100000); const u=`https://image.pollinations.ai/prompt/${s}?width=1920&height=1080&seed=${seed}&nologo=true&model=flux`;
+                    try{const r=await fetch(u); if(!r.ok)throw new Error("Pollinations"); const b=await r.blob(); return URL.createObjectURL(b);}catch(e){return null;}
+                } else {
+                    const u=`https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`;
+                    try{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instances:[{prompt:p+", vintage, b&w, grainy, 8k"}],parameters:{sampleCount:1,aspectRatio:"16:9"}})});if(!r.ok)throw new Error("Gemini");const d=await r.json();if(d.predictions?.[0]?.bytesBase64Encoded)return `data:image/png;base64,${d.predictions[0].bytesBase64Encoded}`;return null;}catch(e){console.error(e);return null;}
+                }
+            };
+            
+            const generateAudioChunk = async (text, voiceName) => {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } } } } })
+                    });
+                    if (!response.ok) throw new Error("Audio fail");
+                    const data = await response.json();
+                    const pcm = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                    if (pcm) return base64ToUint8Array(pcm);
+                    return null;
+                } catch (e) { console.error(e); return null; }
+            };
+
+            const generateLongAudio = async (fullText, voiceName) => {
+                const clean = cleanText(fullText);
+                const chunks = splitTextIntoChunks(clean);
+                const buffers = [];
+                for (const chunk of chunks) {
+                    if (!chunk.trim()) continue;
+                    const b = await generateAudioChunk(chunk, voiceName);
+                    if (b) buffers.push(b);
+                    await delay(300);
+                }
+                if (buffers.length === 0) return null;
+                return concatenateAudioBuffers(buffers);
+            };
+
+            const handleManualChapterAudio = async (index) => {
+                const chapter = chaptersContent[index];
+                if (!chapter.content) return;
+                setChaptersContent(prev => { const u = [...prev]; u[index].isAudioLoading = true; return u; });
+                try {
+                    const pcm = await generateLongAudio(chapter.content, selectedVoice);
+                    if (pcm) {
+                        const url = URL.createObjectURL(createWavBlob(pcm));
+                        setChaptersContent(prev => { const u = [...prev]; u[index].audioUrl = url; u[index].isAudioLoading = false; return u; });
+                    } else throw new Error("No audio");
+                } catch (e) {
+                    alert("Audio Gen Failed");
+                    setChaptersContent(prev => { const u = [...prev]; u[index].isAudioLoading = false; return u; });
+                }
+            };
+
+            const handleGenerateIdeas = async () => {
+                if (!apiKey) return alert("API Key Required");
+                setLoadingIdeas(true); setGeneratedIdeas([]);
+                try {
+                    const burned = history.map(h=>h.topic).join(", ");
+                    const sys = "You are a content strategist for @WWII-Records YouTube.";
+                    const p = `Generate 5 viral topics. Formula: '[Enemy Group] Were [Terrified/Shocked] When [Allied Tech] Did [X]'. Focus: ${selectedStoryType}. Exclude: [${burned}]. Return RAW JSON strings.`;
+                    const txt = await generateWithRetry(p, sys);
+                    let ideas = []; try{ideas=JSON.parse(txt.replace(/```json|```/g,''))}catch(e){ideas=txt.split('\n').slice(0,5)};
+                    if(!Array.isArray(ideas)) ideas=["Error"];
+                    setGeneratedIdeas(ideas);
+                } catch(e){ alert(e.message) } finally { setLoadingIdeas(false); }
+            };
+            
+            const handleGenerateSingleVisual = async (index) => {
+                const item = visualTimeline[index];
+                const newTimeline = [...visualTimeline];
+                newTimeline[index].loading = true;
+                setVisualTimeline(newTimeline);
+                const url = await generateImageAsset(item.prompt);
+                newTimeline[index].url = url;
+                newTimeline[index].loading = false;
+                setVisualTimeline([...newTimeline]);
+            };
+
+            const handleGenerateAllVisuals = async () => {
+                setIsBulkGenerating(true);
+                const newTimeline = [...visualTimeline];
+                for (let i = 0; i < newTimeline.length; i++) {
+                    if (!newTimeline[i].url) {
+                        newTimeline[i].loading = true;
+                        setVisualTimeline([...newTimeline]);
+                        const url = await generateImageAsset(newTimeline[i].prompt);
+                        newTimeline[i].url = url;
+                        newTimeline[i].loading = false;
+                        setVisualTimeline([...newTimeline]);
+                        await delay(500); 
+                    }
+                }
+                setIsBulkGenerating(false);
+            };
+            
+            const executeTranslation = async () => { alert("Translation placeholder"); };
+            
+            const downloadDocForDrive = () => {
+                 const cleanBody = chaptersContent.map(ch => `<h2>${ch.title}</h2><p>${cleanText(ch.content)}</p>`).join("");
+                 const html = `<html><body><h1>${topic}</h1><hr/>${cleanBody}</body></html>`;
+                 const b = new Blob([html],{type:'application/msword'}); const u = URL.createObjectURL(b);
+                 const l = document.createElement('a'); l.href=u; l.download=`${topic}_doc.doc`; document.body.appendChild(l); l.click(); document.body.removeChild(l);
+            };
+
+            const startFullOperation = async () => {
+                if(!apiKey||!topic) return alert("API Key/Topic missing");
+                setStep('processing'); setFullScript(''); setChaptersContent([]); setFullAudioBlobUrl(null); setVisualTimeline([]); setProgress(0); setTargetLang("English");
+                try {
+                     setLoadingStatus("Planning Propaganda...");
+                     // REVERTED TO WW2 TALES FORMULA (Reaction/Shock)
+                     const mP = `Topic: "${topic}". Story: ${selectedStoryType}. Generate JSON: 1.titles(5) following "[Enemy] Were [Emotion] When..." formula. 2.description 3.hashtags 4.videoTags 5.imagePrompt(colorized). 6.imageQueries(array of 5 strings for Google Search). RAW JSON.`;
+                     const mR = await generateWithRetry(mP); const mJ = JSON.parse(mR.replace(/```json|```/g,''));
+                     setMetadata(mJ); setThumbnailPrompt(mJ.imagePrompt);
+                     
+                     setLoadingStatus("Thumbnail...");
+                     const tU = await generateImageAsset(mJ.imagePrompt); setThumbnailUrl(tU);
+                     
+                     setLoadingStatus("Drafting Outline...");
+                     const oP = `10-chapter outline for "${topic}". Perspective: ${selectedStoryType}. JSON array strings.`;
+                     const oR = await generateWithRetry(oP); 
+                     
+                     // SANITIZATION: Ensure outline is strings only
+                     let out=[]; 
+                     try{
+                         const parsed = JSON.parse(oR.replace(/```json|```/g,''));
+                         if(Array.isArray(parsed)) {
+                             out = parsed.map(i => (typeof i === 'object' && i !== null) ? (i.title || i.chapter || JSON.stringify(i)) : String(i));
+                         } else {
+                             out = ["Chapter 1", "Chapter 2"];
+                         }
+                     }catch(e){
+                         out=oR.split('\n').filter(l=>l.length>0).slice(0,10);
+                     }
+                     
+                     const initC = out.map(t=>({title:t, content:'', audioUrl:null, isAudioLoading:false, images:[], isImagesLoading:false}));
+                     setChaptersContent(initC);
+                     
+                     let sB = `TITLE: ${topic}\n\n`;
+                     let tC = [...initC];
+                     let tV = []; let totSec = 0;
+                     
+                     for(let i=0; i<out.length; i++){
+                         setLoadingStatus(`Writing Chapter ${i+1}...`); setProgress((i/out.length)*50);
+                         // UPDATED SCRIPT PROMPT
+                         const cP = `Write CHAPTER ${i+1}: "${out[i]}" for "${topic}". 
+                         CONTEXT: Part ${i+1}/10. 
+                         STYLE: Documentary Narrator telling a story (WW2 Tales style).
+                         MANDATORY OPENING: Start strictly with a Date/Location phrase (e.g. "In July 1944, when the allied forces...").
+                         TONE: Immersive, emotional, shocking (focus on fear/awe).
+                         VOCABULARY: Normal speaking vocabulary. Simple, clear, avoiding advanced academic words.
+                         FORMAT: Pure narration text. NO headers. ~800 words.`;
+                         
+                         const c = await generateWithRetry(cP); const cClean = cleanText(c);
+                         sB += `\n\n## ${out[i]}\n\n${cClean}`; tC[i].content = cClean;
+                         
+                         const wC = cClean.split(/\s+/).length; const dur = Math.ceil((wC/140)*60);
+                         
+                         // GOOGLE SEARCH QUERY GENERATION
+                         const vP = `Based on this text: "${cClean.slice(0,500)}...", write a specific Google Image Search query to find a real historical photo. Return ONLY the search query string.`;
+                         const vQuery = await generateWithRetry(vP);
+                         
+                         tV.push({id:Date.now()+i, chapter:`Chapter ${i+1}`, timestamp:formatTime(totSec), query:vQuery.replace(/"/g,''), url:null, loading:false});
+                         if(dur>60){
+                              const vP2 = `Based on the ending of this text: "...${cClean.slice(-500)}", write a specific Google Image Search query. Return ONLY the search query string.`;
+                              const vQuery2 = await generateWithRetry(vP2);
+                              tV.push({id:Date.now()+i+100, chapter:`Chapter ${i+1} (Cont.)`, timestamp:formatTime(totSec+(dur/2)), query:vQuery2.replace(/"/g,''), url:null, loading:false});
+                         }
+                         totSec += dur; await delay(500);
+                     }
+                     setChaptersContent(tC); setFullScript(sB); setVisualTimeline(tV);
+                     
+                     if(autoGenerateAudio) {
+                         let chunks = [];
+                         for(let i=0; i<tC.length; i++){
+                             setLoadingStatus(`Audio ${i+1}...`); setProgress(50+((i/tC.length)*50));
+                             const pcm = await generateLongAudio(tC[i].content, selectedVoice);
+                             if(pcm){ chunks.push(pcm); tC[i].audioUrl = URL.createObjectURL(createWavBlob(pcm)); }
+                             await delay(300);
+                         }
+                         setChaptersContent([...tC]);
+                         if(chunks.length) setFullAudioBlobUrl(URL.createObjectURL(createWavBlob(concatenateAudioBuffers(chunks))));
+                     }
+                     
+                     saveToHistory({topic, script:sB, chapters:tC, metadata:mJ, thumbnailUrl:tU, thumbnailPrompt:mJ.imagePrompt, voice:selectedVoice, storyType:selectedStoryType, visualTimeline:tV});
+                     setProgress(100); setStep('results'); setActiveTab('visuals');
+                } catch(e) { console.error(e); alert("Error"); setStep('results'); } finally { setLoadingStatus(""); }
+            };
+
+            return (
+                <div className="min-h-screen bg-stone-950 text-stone-200 font-sans selection:bg-amber-900 selection:text-white flex flex-col">
+                    <header className="bg-black/40 border-b border-stone-800 p-4 backdrop-blur-md sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center gap-3"><div className="bg-amber-700 p-2 rounded"><Type className="w-6 h-6 text-stone-900" /></div><div><h1 className="text-2xl font-serif font-bold text-stone-100 tracking-wider">THE WAR ROOM</h1><p className="text-[10px] text-amber-600 font-mono uppercase tracking-[0.3em]">Historical Content Command</p></div></div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 p-4 md:p-8">
+                        <div className="max-w-7xl mx-auto h-full">
+                            {step === 'input' && <InputSection 
+                                apiKey={apiKey} setApiKey={setApiKey} 
+                                selectedStoryType={selectedStoryType} setSelectedStoryType={setSelectedStoryType}
+                                selectedVoice={selectedVoice} setSelectedVoice={setSelectedVoice}
+                                topic={topic} setTopic={setTopic}
+                                generatedIdeas={generatedIdeas} handleGenerateIdeas={handleGenerateIdeas} loadingIdeas={loadingIdeas}
+                                autoGenerateAudio={autoGenerateAudio} setAutoGenerateAudio={setAutoGenerateAudio}
+                                startFullOperation={startFullOperation}
+                                history={history} loadFromHistory={loadFromHistory} clearHistory={clearHistory}
+                            />}
+                            
+                            {step === 'processing' && <ProcessingSection loadingStatus={loadingStatus} progress={progress} />}
+
+                            {step === 'results' && (
+                                <div className="h-full flex flex-col animate-fade-in">
+                                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 bg-stone-900 p-4 border-b border-stone-800 sticky top-0 z-10 shadow-lg gap-4">
+                                        <div className="truncate max-w-lg"><h2 className="text-xl font-serif text-stone-200 flex items-center gap-2"><span className="text-amber-600 mr-2">File:</span>{topic}</h2></div>
+                                        <div className="flex items-center gap-3">
+                                             <div className="flex items-center bg-stone-800 rounded px-2 py-1 border border-stone-700"><Globe className="w-4 h-4 text-stone-400 mr-2" /><select value={targetLang} onChange={(e) => setTargetLang(e.target.value)} className="bg-transparent text-xs text-stone-200 focus:outline-none font-mono mr-2">{TARGET_LANGUAGES.map(lang => <option key={lang} value={lang}>{lang}</option>)}</select><button onClick={executeTranslation} className="text-[10px] bg-stone-700 hover:bg-amber-700 text-stone-300 hover:text-white px-2 py-1 rounded transition-colors uppercase font-bold tracking-wider">Translate</button></div>
+                                            <button type="button" onClick={() => setStep('input')} className="text-xs font-mono text-stone-500 hover:text-amber-500 flex items-center gap-2 uppercase"><RefreshCw className="w-3 h-3" /> New Op</button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-4 mb-6 border-b border-stone-800 px-4 overflow-x-auto">
+                                        <button type="button" onClick={() => setActiveTab('script')} className={`pb-3 px-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${activeTab === 'script' ? 'border-amber-600 text-amber-500' : 'border-transparent text-stone-500 hover:text-stone-300'}`}><FileText className="w-4 h-4" /> Full Script</button>
+                                        <button type="button" onClick={() => setActiveTab('visuals')} className={`pb-3 px-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${activeTab === 'visuals' ? 'border-amber-600 text-amber-500' : 'border-transparent text-stone-500 hover:text-stone-300'}`}><ImageIcon className="w-4 h-4" /> Visuals</button>
+                                        <button type="button" onClick={() => setActiveTab('package')} className={`pb-3 px-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 whitespace-nowrap ${activeTab === 'package' ? 'border-amber-600 text-amber-500' : 'border-transparent text-stone-500 hover:text-stone-300'}`}><Youtube className="w-4 h-4" /> YouTube Package</button>
+                                    </div>
+
+                                    <div className="flex-1 overflow-auto px-4 pb-12 custom-scrollbar">
+                                        {activeTab === 'script' && <ScriptTab 
+                                            fullScript={fullScript} selectedVoice={selectedVoice} fullAudioBlobUrl={fullAudioBlobUrl} 
+                                            topic={topic} chaptersContent={chaptersContent} handleCleanCopy={handleCleanCopy} 
+                                            downloadDocForDrive={downloadDocForDrive} handleManualChapterAudio={handleManualChapterAudio} 
+                                        />}
+                                        {activeTab === 'visuals' && <VisualsTab 
+                                            visualTimeline={visualTimeline} useFreeImages={useFreeImages} setUseFreeImages={setUseFreeImages}
+                                            handleCopyAllPrompts={handleCopyAllPrompts} handleGenerateAllVisuals={handleGenerateAllVisuals}
+                                            isBulkGenerating={isBulkGenerating} handleGenerateSingleVisual={handleGenerateSingleVisual}
+                                        />}
+                                        {activeTab === 'package' && metadata && <PackageTab metadata={metadata} thumbnailUrl={thumbnailUrl} handleCopy={handleCopy} />}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+                    <footer className="border-t border-stone-900 p-4 text-center"><p className="text-stone-700 text-xs font-mono">Designed for Historical Archives & Veteran Outreach</p></footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<WarRoomApp />);
+    </script>
+</body>
+</html>
